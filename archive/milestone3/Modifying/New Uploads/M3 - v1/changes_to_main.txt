@@ -1,0 +1,22 @@
+-> Typing disabled before/after timer:
+
+- typing_active goes high only on timer_start_pulse (KEY2 edge).
+	It goes low on timer_expired and on new preload.
+
+-Keyboard acceptance and char_valid are both ANDed with typing_active.
+
+
+-> Per-char red/green:
+
+- typed_char_valid drives comparator and stats.
+
+- prev_char_errors / char_errors delta ⇒ current_char_correct.
+
+- draw_color_kb_colored chooses COLOR_CORRECT vs COLOR_INCORRECT for all glyph pixels for that char.
+
+
+-> Stats phases:
+
+- game_active -> in-game phase (to draw live stats continuously).
+
+- post_game_phase -> latched after timer expires (use for one-time end-screen stats + different background).

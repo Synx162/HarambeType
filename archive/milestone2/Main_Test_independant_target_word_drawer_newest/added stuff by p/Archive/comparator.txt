@@ -1,0 +1,193 @@
+compare_typed_done_explained.txt
+--------------------------------
+
+Goal
+----
+Score a stream of typed characters against a reference list of words
+(done_list / target_words encoding) and output:
+
+- char_errors: total number of character-level mistakes.
+- word_errors: total number of incorrect words.
+
+Character encoding is 0..26, with LETTER_SPACE = 26.
+
+
+Interface
+---------
+Inputs:
+- clock, resetn
+- start_new_test: 1-cycle pulse to reset indices and counters for a new run
+  (without resetting the whole FPGA).
+- typed_char: 5-bit encoded character from keyboard (0..26).
+- typed_char_valid: pulse that says "typed_char is valid this cycle".
+- words: reference list in the same layout as done_list / target_words:
+
+    words[word_index * n_letters + letter_index]
+
+  where:
+  - n_letters = 8  (fixed letters per word row, including slots after terminator)
+  - n_words   = 40 (max number of rows)
+
+Outputs:
+- char_errors [15:0]
+- word_errors [15:0]
+
+
+Internal state
+--------------
+- word_index   (0..n_words-1): which word we are currently scoring.
+- letter_index (0..n_letters-1): position inside that word.
+- current_word_len (0..n_letters): number of non-space letters
+  in the current word (length before its terminator).
+- current_word_wrong: flag that this word had any error at all.
+
+Helpers:
+- recompute_word_len():
+    Looks at words[word_index * n_letters + k] for k = 0..n_letters-1.
+    Counts non-space entries until the first LETTER_SPACE.
+    This result is saved in current_word_len.
+- goto_next_word():
+    Moves word_index to the next word (or clamps at the last word),
+    resets letter_index to 0, clears current_word_wrong, and recomputes
+    current_word_len for the new word.
+
+
+Scoring rules implemented
+-------------------------
+We look at one typed_char whenever typed_char_valid = 1.
+
+Let:
+    expected_char = words[word_index * n_letters + letter_index].
+
+There are two main branches: user typed SPACE vs user typed NON-SPACE.
+
+
+1) User typed SPACE (typed_char == LETTER_SPACE)
+------------------------------------------------
+
+Case 1A: expected_char == LETTER_SPACE
+    - The target word is also at a space here.
+    - This is the "end-of-word at the correct spot" case.
+    - If current_word_wrong == 1:
+        word_errors++  (this word is counted as wrong overall).
+      If current_word_wrong == 0:
+        word_errors does NOT change (perfect word).
+    - Then goto_next_word().
+
+Case 1B: expected_char != LETTER_SPACE
+    - The target word is NOT finished yet, but the user has hit space early.
+    - The remaining characters in the target word are all counted as errors:
+
+        remaining = current_word_len - letter_index
+
+      If remaining > 0:
+        char_errors += remaining
+    - current_word_wrong is set to 1.
+    - word_errors++  (this word is considered wrong).
+    - Then goto_next_word().
+
+This matches:
+- "If the user sends a space before the word in done_list is over,
+   increment the number of char errors by however many chars were left
+   until the space and increment word errors by one."
+
+
+2) User typed NON-SPACE (typed_char != LETTER_SPACE)
+----------------------------------------------------
+
+Case 2A: expected_char == LETTER_SPACE
+    - The target word is already ended (we're on the terminator slot),
+      but the user is still typing letters.
+    - Every extra character is counted as an error:
+        char_errors++
+    - Mark this word as wrong:
+        current_word_wrong = 1
+    - We do NOT advance letter_index: we stay pointing at the space terminator.
+      This way, any further non-space characters continue to be considered
+      "extra letters after word end".
+    - When the user eventually types SPACE, it will fall into Case 1A:
+        - expected_char == LETTER_SPACE
+        - current_word_wrong == 1
+        -> word_errors++ at that moment.
+      So the word contributes exactly 1 to word_errors, no matter how many
+      extra letters they typed.
+
+This matches:
+- "If the user continues typing (not sending a space) after the word
+   in done_list is over then the number of char errors is incremented
+   by however many extra chars the user provided before a space and
+   word errors is incremented by 1."
+
+Case 2B: expected_char != LETTER_SPACE
+    - We are inside the body of the word, not at its end yet.
+    - If typed_char != expected_char:
+        - char_errors++
+        - current_word_wrong = 1
+      (this is a substitution error).
+    - In any case, advance to the next letter slot:
+        letter_index++ (up to n_letters-1).
+
+This covers normal per-letter matching.
+
+
+Word-level semantics
+--------------------
+current_word_wrong is sticky for the current word:
+
+- It becomes 1 if:
+  - Any typed character inside the word does not match expected_char, or
+  - The user types extra characters beyond the terminator, or
+  - The user ends the word early with a space.
+
+- A word contributes to word_errors at most once.
+  That happens only when the word is ended by a SPACE in the correct
+  place (Case 1A). If current_word_wrong == 1 at that moment,
+  we increment word_errors.
+
+- A perfectly typed word (no mismatches, no early/extra chars, and
+  a space at the correct position) produces:
+  - 0 char_errors contribution from that word
+  - 0 word_errors contribution from that word.
+
+
+Reset / start_new_test behavior
+-------------------------------
+- resetn low:
+    - char_errors   = 0
+    - word_errors   = 0
+    - word_index    = 0
+    - letter_index  = 0
+    - current_word_wrong = 0
+    - recompute_word_len() for word 0.
+
+- start_new_test high for one cycle (while resetn is high):
+    - Same internal reset as above, but without touching the rest of the system.
+    - Useful to clear scores and indices between runs.
+
+
+How to connect this in main.v
+-----------------------------
+1) You already have:
+    - scancode_to_fontIndex → inputChar (0..49), inputChar_rdy.
+2) Somewhere you map inputChar → 5-bit code (0..26) with LETTER_SPACE = 26.
+    - That 5-bit value should be wired into typed_char.
+    - Its gated-valid pulse (respecting drawer_busy etc.) should go into typed_char_valid.
+
+3) From done_list:
+    - You already have reg [4:0] words[0:N_TOTAL-1].
+    - Connect that to the comparator:
+
+        compare_typed_done ERROR_COUNTER (
+            .clock          (CLOCK_50),
+            .resetn         (resetn),
+            .start_new_test (start_test_pulse),
+            .typed_char     (kb_char_code_5bit),
+            .typed_char_valid(kb_char_valid_gated),
+            .words          (done_words),
+            .char_errors    (char_errors),
+            .word_errors    (word_errors)
+        );
+
+4) char_errors and word_errors can be:
+    - Stored in registers in main.
+    - Displayed on-screen later using your existing drawing pipeline.

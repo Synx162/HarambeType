@@ -1,0 +1,194 @@
+done_list.v — Detailed Notes
+============================
+
+1. Purpose
+----------
+done_list collects the "finished" words from the typing session and stores them
+in the same shape as target_words: a 2D grid [word][letter] flattened to 1D.
+
+- target_words: source of planned/target words.
+- done_list: record of what has been completed so far.
+
+You can later stream from done_list in the same way as target_words, so any
+display/comparator logic can reuse the same style of interface.
+
+2. Storage Layout
+-----------------
+We keep:
+
+    parameter integer n_letters = 8;   // letters per word (slots)
+    parameter integer n_words   = 40;  // max number of words
+
+Total slots: N_TOTAL = n_letters * n_words.
+
+The physical array is:
+
+    reg [4:0] words[0 : N_TOTAL-1];
+
+Index mapping:
+
+    index = word_index * n_letters + letter_index
+
+This matches the target_words pattern: letters are packed from the front of
+each word, trailing slots remain LETTER_SPACE and act as implicit terminators.
+
+3. Input / Write Interface
+--------------------------
+Inputs:
+
+    add_char : 1-cycle strobe meaning "store char_in now"
+    char_in  : 5-bit code for the next symbol (letter or LETTER_SPACE)
+
+Internal write state:
+
+    wr_word    : which word we are currently filling
+    wr_letter  : which letter position inside that word
+    words_used : number of words that have been finalized
+
+Flattened write index:
+
+    wr_index = wr_word * n_letters + wr_letter
+
+Behavior:
+
+- On reset:
+    wr_word    = 0
+    wr_letter  = 0
+    words_used = 0
+
+- When add_char = 1:
+    a) char_in == LETTER_SPACE
+       - This means "end of current word".
+       - We treat this as a separator, do NOT store it in the array.
+       - Advance wr_word (if not at the last word).
+       - Reset wr_letter to 0.
+       - Set words_used = wr_word + 1, meaning the next free word index.
+
+    b) char_in != LETTER_SPACE
+       - This is a real letter.
+       - Store it at words[wr_index] if wr_index < N_TOTAL.
+       - Increment wr_letter up to n_letters - 1.
+       - If more than n_letters letters arrive before a space, we keep the
+         first n_letters and ignore the rest (wr_letter is clamped).
+
+Full condition:
+
+- If wr_word == n_words - 1 and a LETTER_SPACE arrives, we do not advance
+  wr_word or words_used anymore. Effectively the structure is full, and any
+  extra data is ignored.
+
+4. Output / Read Interface
+--------------------------
+Inputs:
+
+    enable_send : 1-cycle request for "next character"
+
+Outputs:
+
+    char_sent    : 5-bit output character
+    letter_ready : 1-cycle "valid" pulse after char_sent is updated
+
+Internal read state:
+
+    word_number   : which word we are currently reading
+    letter_number : which letter slot in that word
+    sending_space : indicates whether the next output is an inter-word space
+    enable_send_d : delayed version of enable_send, used to time letter_ready
+
+Read indices:
+
+    rd_index      = word_number * n_letters + letter_number
+    rd_next_index = rd_index + 1 (the next letter in the same word)
+
+We also compute:
+
+    max_valid_word = (words_used == 0) ? 0 : (words_used - 1)
+
+So we only cycle through words 0..max_valid_word (inclusive).
+
+Read behavior:
+
+- On reset:
+    word_number   = 0
+    letter_number = 0
+    sending_space = 0
+    char_sent     = LETTER_SPACE
+    letter_ready  = 0
+    enable_send_d = 0
+
+- Every clock:
+    enable_send_d <= enable_send
+    letter_ready  <= 0 by default
+
+- When enable_send = 1:
+
+    a) If sending_space = 1:
+       - Output a LETTER_SPACE.
+       - Clear sending_space.
+       - Advance word_number:
+            - If word_number == max_valid_word, wrap back to 0.
+            - Else increment by 1.
+
+    b) If sending_space = 0:
+       - Output words[rd_index].
+       - Increment letter_number.
+       - Check the "end of word" condition:
+
+            - End if:
+                letter_number == (n_letters - 1)
+             OR
+                words[rd_next_index] == LETTER_SPACE
+
+         If end-of-word is detected:
+            - Set sending_space = 1 (next output will be a space).
+            - Reset letter_number to 0.
+
+- letter_ready:
+    We assert letter_ready (1) one cycle after enable_send using the delayed
+    version: if enable_send_d is high, letter_ready <= 1. This is the same
+    pattern as in target_words: you request on enable_send and consume the
+    output when letter_ready is high.
+
+5. Initialization
+-----------------
+The initial block fills all N_TOTAL slots with LETTER_SPACE. This ensures:
+
+- At reset, any unread or unused parts of the storage look like "empty" space.
+- End-of-word detection see spaces as terminators.
+- Words that have not been filled yet will stream out as all spaces.
+
+Note that reset only resets the indices and counters, not the array content.
+
+6. Integration with target_words
+--------------------------------
+Typical hookup:
+
+- target_words outputs:
+    tw_char_sent
+    tw_letter_ready   (or letter_ready equivalent)
+
+- done_list inputs:
+    add_char = tw_letter_ready
+    char_in  = tw_char_sent
+
+You control when you want a character to count as "done". For example, you
+might gate add_char with some "word complete" or "confirmed" signal.
+
+The core idea:
+
+1. target_words streams the target text.
+2. As the user completes words and you decide they are "done", you send those
+   same characters (letters + spaces) into done_list via add_char/char_in.
+3. done_list keeps appending them, batch by batch, from its last write position.
+4. Later, you can stream done_list back out (using enable_send / char_sent /
+   letter_ready) for display or comparison, with the same kind of interface
+   you already use with target_words.
+
+7. Edge Cases
+-------------
+- If more than n_letters characters are sent between spaces for a given word,
+  only the first n_letters are stored.
+- If more than n_words words are attempted, the extra ones are ignored once
+  wr_word reaches n_words - 1.
+- If words_used is 0, max_valid_word is forced to 0, so reading will cycle
+  over word 0 only, which is a block of spaces.

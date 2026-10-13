@@ -1,0 +1,46 @@
+// NO SYNCHRONIZER NEEDED:
+// ----------------------
+// The ps2_rec signal from ps2_receiver.v is combinational logic derived from
+// Packet and Serial, which are both registered on CLOCK_50 (same clock as this
+// module). Since we're in the same clock domain, there's no metastability risk.
+// 
+// Our output register samples sc_rdy on the clock edge, after any combinational
+// glitches have settled. This is sufficient for safe operation.
+
+// STATE MACHINE:
+// -------------
+// PS/2 keyboard sends different types of scancodes:
+// - MAKE code: Single byte when key pressed (e.g., 0x1C for 'A')
+// - BREAK code: F0 followed by key code when released (e.g., F0 1C)
+// - Extended codes: E0 followed by key code (e.g., E0 75 for up arrow)
+// - Extended break: E0 F0 followed by key code
+//
+// We only want simple MAKE codes, so the FSM filters out everything else:
+// - BASE state: Normal operation, waiting for keys
+// - GOTF0 state: Just saw F0, next byte is a break code (ignore it)
+// - GOTE0 state: Just saw E0, next is an extended code (ignore it)  
+// - GOTE0F0 state: Saw E0 then F0, next is extended break (ignore it)
+
+// FAST TYPING FIX:
+// ---------------
+// The decoder and FSM check 'sc' directly so that state transitions and 
+// character decoding happen in the same cycle the data arrives. This prevents
+// the FSM from getting out of sync when bytes arrive back-to-back during fast
+// typing.
+
+// REGISTERED OUTPUT:
+// -----------------
+// inputChar_rdy is registered (not combinational) to ensure a clean, glitch-free
+// signal that only changes on clock edges. This guarantees downstream modules
+// can reliably sample it without timing issues.
+
+// CHARACTER MAPPING:
+// -----------------
+// Mapping:
+//   0-25  : letters a-z
+//   26    : space
+//   27-36 : digits 0-9
+//   37-47 : punctuation (` - = [ ] \ ; ' , . /)
+//   48    : backspace
+//   49    : enter
+//   FF    : invalid/unmapped key

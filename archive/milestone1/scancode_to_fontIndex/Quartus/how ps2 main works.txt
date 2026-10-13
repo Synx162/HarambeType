@@ -1,0 +1,32 @@
+// =============================================================================
+// HOW THIS WORKS:
+// =============================================================================
+//
+// 1. PS/2 RECEIVER:
+//    - Receives raw bytes from keyboard
+//    - Outputs scancode (raw byte) and ps2_rec (pulse when ready)
+//    - Shows ALL bytes including F0 (break), E0 (extended), and normal keys
+//
+// 2. SCANCODE DECODER:
+//    - Takes the scancode from PS/2 receiver
+//    - Filters out F0 and E0 sequences using state machine
+//    - Only outputs valid MAKE codes (key press, not release)
+//    - Converts scancode to character code (0-49)
+//
+// 3. DISPLAY REGISTERS:
+//    - Both last_scancode and last_decoded update together on char_ready
+//    - This prevents display lag where one updates before the other
+//
+// 4. HEX DISPLAYS:
+//    - HEX5-HEX4: Raw scancode in hex (e.g., "1C" for 'a' key)
+//    - HEX1-HEX0: Decoded character in hex (e.g., "00" for 'a' = code 0)
+//
+// EXAMPLE WHEN PRESSING 'A':
+// - Press 'a': HEX5-HEX4 shows "1C", HEX1-HEX0 shows "00" (a=0)
+// - Release 'a': HEX5-HEX4 shows "F0" then "1C", HEX1-HEX0 stays "00"
+//                (decoder ignores break codes, so decoded value doesn't change)
+//
+// EXAMPLE WHEN PRESSING SPACE:
+// - Press space: HEX5-HEX4 shows "29", HEX1-HEX0 shows "1A" (space=26=0x1A)
+//
+// ==========================================================

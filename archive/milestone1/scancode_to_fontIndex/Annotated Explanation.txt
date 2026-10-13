@@ -1,0 +1,60 @@
+Annotated Explanation:
+Timeline:  [Reset] [MAKE 'a'] [BREAK 'a' sequence] [MAKE 'a' again]
+
+clock:     ___/‾‾\__/‾‾\__/‾‾\__/‾‾\__/‾‾\__/‾‾\__/‾‾\__
+resetn:    0000000‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+sc:        00___________1c_________f0_____1c__________
+           (idle)       (key 'a')  (break)(key 'a')
+
+sc_rdy:    _____________/‾\________/‾\____/‾\__________
+           (pulse when scancode arrives)
+
+inputChar: 00___________00_____________________00______
+           (no output)  (a=0)                  (a=0)
+
+inputChar_rdy: ________/‾\____________________/‾\______
+               (pulse)  ↑                      ↑
+                     MAKE 'a'              MAKE 'a' again
+
+FSM y:     0____________0__________1___0___0___________
+           BASE         BASE      GOTF0→BASE→BASE
+
+FSM Y:     0____________0__1__0___1___0___0___________
+           (next state logic)
+
+code:      255__________0_____________________0________
+           (FF=invalid) (a=0)                 (a=0)
+
+make_cycle: ____________/‾\____________________/‾\______
+            (valid MAKE code detected)
+Why inputChar_rdy Behaves This Way:
+First MAKE 'a' (scancode 0x1C):
+
+sc_rdy pulses when 0x1C arrives
+FSM is in BASE state (y=0)
+sc = 0x1C (not F0, not E0) ✓
+Decoder outputs code = 0 (for 'a')
+make_cycle = HIGH because: (y==BASE) && sc_rdy && ~is_F0 && ~is_E0
+inputChar_rdy pulses HIGH for 1 cycle ✓
+inputChar latches value 0
+
+BREAK sequence (F0, 1C):
+
+First byte: F0 arrives
+
+sc_rdy pulses
+FSM sees F0, transitions: BASE → GOTF0 (Y goes to 1)
+make_cycle = LOW (because is_F0 is true)
+No output pulse ✓
+
+
+Second byte: 1C arrives
+
+sc_rdy pulses
+FSM is now in GOTF0 state (y=1)
+make_cycle = LOW (because y != BASE)
+No output pulse ✓
+FSM returns: GOTF0 → BASE
+
+EXPLAINATION OF 

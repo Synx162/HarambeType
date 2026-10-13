@@ -1,0 +1,16 @@
+OUR 
+start: H.MARGIN --> 40  end: 360
+start: V.MARGIN --> 200 end: 620 
+
+
+*WE DONT HAVE END OF BOX WRAPPING LOGIC*
+
+For Font MIF: 
+n (color depth) = 9;
+image_w = 216; 
+M_n = 11; // since we need 1728 addresses and 2^11 is 2048
+
+
+For BG MIF: 
+n (color depth) = 9;
+M_n = 19; // since 2^19 = 524,288 > 640 * 480 = 307,200
