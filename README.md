@@ -1,6 +1,6 @@
 # HarambeType
 
-A Monkeytype-style typing test in Verilog on a DE1-SoC FPGA. No CPU or soft core: keyboard decoding, word shuffling, scoring and text rendering are all hardware.
+A [Monkeytype](https://monkeytype.com)-style typing test in Verilog on a DE1-SoC FPGA. No CPU or soft core: keyboard decoding, word shuffling, scoring and text rendering are all hardware.
 
 ![Verilog](https://img.shields.io/badge/RTL-Verilog--2001-blue)
 ![Board](https://img.shields.io/badge/board-DE1--SoC-orange)
