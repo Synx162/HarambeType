@@ -11,11 +11,9 @@ There is no CPU or soft core in the design. Keyboard decoding, word shuffling, s
 ![Sim](https://img.shields.io/badge/sim-Icarus%20Verilog-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-<p align="center">
-  <a href="doc/media/demo.mp4"><img src="doc/media/demo.gif" width="560" alt="Typing on the board"></a>
-</p>
+https://github.com/user-attachments/assets/7e3226c9-695f-4c09-96e7-4745e9431d1e
 
-<p align="center"><em>Running on the board (click for the full video).</em></p>
+<p align="center"><em>Running on the board. Shuffling words, typing a round, and wrong letters turning red.</em></p>
 
 ---
 
