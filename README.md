@@ -96,9 +96,9 @@ Subsystem diagrams: [input](doc/diagrams/input_path.png) · [word source](doc/di
 | space | end of word | next word, +1 word error if marked wrong |
 | space | more letters | +1 char error per skipped letter, +1 word error |
 
-A letter is drawn red if the char error count went up on that keypress. At the end of the round `stats_calculator` computes `WPM = correct × 4 / 5` and `accuracy = correct × 100 / total` and converts them to BCD.
+A letter is drawn red if the char error count went up on that keypress. At the end of the round `stats_calculator` computes `correct = total − char_errors`, then `WPM = correct × 4 / 5` (standard 5 characters per word, ×4 to scale a 15 s round to a minute) and `accuracy = correct × 100 / total`, and converts both to BCD for display.
 
-**Drawing.** Three drawers (target text, typed text, stats) share one FSM: `IDLE → SETUP → READ → DRAW → NEXT_PX → NEXT_ROW → DONE`. Each reads an 8×8 glyph from ROM and writes lit pixels scaled 2× (3× for result digits).
+**Drawing.** There's no text mode, so every glyph is copied pixel by pixel into the framebuffer. Three drawers (target text, typed text, stats) share one FSM: `IDLE → SETUP → READ → DRAW → NEXT_PX → NEXT_ROW → DONE`. On a `valid` pulse a drawer turns the cursor's row and column into a screen position, reads the glyph's 8×8 pixels from ROM (letter *n* starts at address `n × 8`), and writes each lit pixel as a 2×2 block (3×3 for result digits). Background pixels are skipped. A glyph takes about 400 cycles, around 8 µs, which is well under the time between keystrokes.
 
 **Two framebuffers.** Titles, labels and borders are preloaded from `.mif` images. `vga_adapter` was modified to hold two 640×480 framebuffers, one for the game and one for results, selected by a single bit. Dropping to 3-bit color made both fit in 45% of block RAM; one 9-bit framebuffer alone would take 68%.
 
@@ -107,6 +107,8 @@ A letter is drawn red if the char error count went up on that keypress. At the e
   &nbsp;
   <img src="doc/media/framebuffer_results.png" width="400" alt="Results framebuffer">
 </p>
+
+**Clearing and arbitration.** A clear FSM sweeps rectangles back to black: every text box on reset, and the typing box whenever the cursor wraps past its 7th row. While it runs it owns the pixel bus and keystrokes are blocked. Otherwise the arbiter routes the preload or typed-text drawer during the game and the stats drawer after it, so only one source writes to the framebuffer at a time.
 
 ## Repository layout
 
@@ -135,6 +137,8 @@ cd test && make
 | `tb_comparator` | Perfect typing, typos, short words, extra letters | PASS, 2 XFAIL |
 | `tb_target_words` | Each word shown is the one the randomizer picked | XFAIL |
 | `tb_timer` | Round lasts 15 s | XFAIL |
+
+The testbenches check their own results instead of relying on waveforms. `tb_input` drives real PS/2 frames, with the clock idling high between bytes and a correct parity bit. `tb_comparator` loads a word list into `done_list` the same way the preload does, then types sequences and compares the error counters against expected values. `tb_timer` swaps the 50 M-cycle second for a 100-cycle one so a full round simulates instantly.
 
 XFAIL = the test checks correct behaviour and fails due to a known bug.
 
