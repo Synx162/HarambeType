@@ -80,7 +80,9 @@ Timing is not met: Fmax is 17.6 MHz against the 50 MHz clock, and there's no `.s
 
 Subsystem diagrams: [input](doc/diagrams/input_path.png) · [word source](doc/diagrams/word_source.png) · [scoring](doc/diagrams/scoring_path.png) · [rendering](doc/diagrams/render_path.png)
 
-**Keyboard input.** `ps2_receiver` passes the PS/2 lines through 2-FF synchronizers and shifts in 11-bit frames. `scancode_to_fontIndex` drops release (`F0`) and extended (`E0`) codes and maps a–z to 0–25 and space to 26, which are also the glyph positions in the font ROM.
+**Game flow.** KEY1 starts a shuffle. When it finishes, the preload FSM (`IDLE → WAIT_LETTER → WAIT_DONE`) requests one character at a time, waits for it to be drawn, and stops at a word boundary. KEY2 sets `typing_active` and starts the timer; keys are only accepted while it's set and no drawer or clear is busy. When the timer expires, `typing_active` drops, `nextScreen` switches to the results framebuffer, and the stats drawer runs exactly once (latched by `pg_draw_done`). The arbiter hands the pixel bus to the text drawers or the stats drawer depending on the phase.
+
+**Keyboard input.** The keyboard drives its own PS/2 clock, which is asynchronous to the 50 MHz system clock, so sampling it directly risks metastability. `ps2_receiver` passes both PS/2 lines through 2-FF synchronizers first, then shifts in 11-bit frames on the synchronized clock's falling edge. `scancode_to_fontIndex` drops release (`F0`) and extended (`E0`) codes and maps a–z to 0–25 and space to 26, which are also the glyph positions in the font ROM.
 
 **Word selection.** `word_randomizer` runs an 8-bit LFSR seeded from a free-running counter, with a 200-bit used-word vector to prevent repeats. `target_words` keeps the first 49 picks. The preload FSM streams them one character at a time to the screen and into `done_list`, stopping at a word boundary after 175 characters.
 
