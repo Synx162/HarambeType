@@ -203,7 +203,7 @@ The full history is in [`archive/`](archive).
 
 ## Credits and license
 
-Built by [@Synx162](https://github.com/Synx162) and a teammate as a two-person course project.
+Built by [@Synx162](https://github.com/Synx162) and [Philip Mugambi](https://www.linkedin.com/in/philip-mugambi-m/) as a two-person course project.
 
 - `vga_adapter`, `vga_controller`, `vga_address_translator` and `vga_pll` are based on the University of Toronto ECE VGA adapter. `vga_adapter` was modified here to hold two framebuffers.
 - The PS/2 receiver's synchronizer and shift register follow the course PS/2 demo.
