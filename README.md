@@ -1,6 +1,6 @@
 # HarambeType
 
-**A Monkeytype-style typing test built in hardware on a DE1-SoC FPGA. There is no CPU and no soft core: keyboard decoding, word generation, scoring and text rendering are all Verilog state machines.**
+A Monkeytype-style typing test we built in Verilog on a DE1-SoC FPGA. There's no processor anywhere in it. The keyboard decoding, word shuffling, scoring and text drawing are all done in hardware.
 
 ![Verilog](https://img.shields.io/badge/RTL-Verilog--2001-blue)
 ![Board](https://img.shields.io/badge/board-DE1--SoC-orange)
@@ -11,29 +11,27 @@
 
 <p align="center">
   <a href="doc/media/demo.mp4"><img src="doc/media/demo.gif" width="560" alt="Typing on the board: the target words are on top and the typed text appears in the box below"></a><br>
-  <sub>Typing on the board during development. Click for the full video.</sub>
+  <sub>Typing on the board during development (click for the full video)</sub>
 </p>
 
 <p align="center">
   <img src="doc/media/gameplay.jpg" width="400" alt="In-game screen with a wrong word drawn in red">
   &nbsp;
   <img src="doc/media/results.jpg" width="360" alt="Results screen showing accuracy, word errors, character errors and WPM">
-  <br><sub>Left: typing a round. The mistyped word <code>PROP</code> is drawn in red. Right: the results screen.</sub>
+  <br><sub>Left: mid-round, with the mistyped word <code>PROP</code> in red. Right: the results screen.</sub>
 </p>
 
 ---
 
 ## What it is
 
-A hardware version of [Monkeytype](https://monkeytype.com), built as the final project for a second-year digital systems course at the University of Toronto. A PS/2 keyboard plugs into the board and a VGA monitor shows the game.
+This was our final project for ECE241 (Digital Systems) at the University of Toronto. You plug a PS/2 keyboard into the board and the game runs on a VGA monitor.
 
-- **KEY1** picks a fresh random set of words from a 200-word dictionary and draws about 175 characters of them in the top box.
-- **KEY2** starts a 15-second round. Every keystroke is drawn in the typing box, white if correct and red if wrong. The board's 7-segment displays show the timer and live error counts.
-- When time runs out, the display switches to a second framebuffer. That screen shows **accuracy, total word errors, total character errors, and words per minute**.
+Press KEY1 and the board shuffles a 200-word list and prints about 175 characters of random words at the top of the screen. Press KEY2 to start a 15-second round. Everything you type shows up in the box underneath, in white if it's right and red if it's wrong, and the 7-segment displays count down the time and track your errors. When the timer hits zero the screen switches to a results page with your accuracy, word errors, character errors and WPM.
 
 ## Results
 
-Quartus Prime 18.1 Lite, device 5CSEMA5F31C6 ([full reports](project/reports)):
+Compiled in Quartus Prime 18.1 Lite for the 5CSEMA5F31C6 (the [full reports](project/reports) are in the repo):
 
 | Resource | Used | Available | % |
 |---|---:|---:|---:|
@@ -44,17 +42,17 @@ Quartus Prime 18.1 Lite, device 5CSEMA5F31C6 ([full reports](project/reports)):
 | DSP blocks | 9 | 87 | 10% |
 | PLLs | 1 | 6 | 17% |
 
-Where the logic went:
+Most of the logic ended up in two modules:
 
-| Module | ALMs | Notes |
+| Module | ALMs | Why |
 |---|---:|---|
-| `comparator` | 4,713 | **60% of the design**: a runtime index into a 1,600-bit bus becomes a huge mux |
-| `done_list` | 1,160 | 320-letter target list held in 2,143 flip-flops, not RAM |
-| `stats_calculator` | 574 | 12 combinational `/` and `%` operators |
-| `target_words` (+ randomizer) | 447 | 200-word dictionary folded into LUT logic |
-| `vga_adapter` | 192 | two full-screen framebuffers in 226 M10Ks |
+| `comparator` | 4,713 | About 60% of the whole design. It reads the target list through a 1,600-bit bus with a runtime index, which turns into a giant mux. |
+| `done_list` | 1,160 | Holds the 320 target letters in flip-flops instead of RAM |
+| `stats_calculator` | 574 | 12 divide and modulo operators |
+| `target_words` + randomizer | 447 | The 200-word dictionary ends up in LUTs |
+| `vga_adapter` | 192 | Two full-screen framebuffers (226 M10Ks) |
 
-**Timing: not met.** The Timing Analyzer reports **Fmax = 17.6 MHz** against the 50 MHz board clock (−36.8 ns worst setup slack), and the project has no `.sdc` file. The design still works on the board, most likely because the slow paths (stats math, digit conversion) only change once per keystroke and settle long before they're used. That's luck, not design. See [Known issues](#known-issues).
+The design does not meet timing. Quartus reports a max frequency of 17.6 MHz, but the board clock is 50 MHz. We also never wrote an `.sdc` file, which is where you tell Quartus what clock speed you're targeting. It still runs fine on the board, probably because the slow paths are the stats math and digit conversion, and those inputs only change once per keypress. We go into this more in [Known issues](#known-issues).
 
 ## Hardware and controls
 
@@ -62,150 +60,148 @@ Where the logic went:
 |---|---|
 | Board | Terasic DE1-SoC |
 | FPGA | Intel Cyclone V SE `5CSEMA5F31C6` |
-| Display | VGA, 640×480 @ 60 Hz, 3-bit color (1 bit per channel) |
-| Input | PS/2 keyboard (letters a–z and space) |
-| Clock | 50 MHz `CLOCK_50`; a PLL makes the 25 MHz pixel clock |
+| Display | VGA, 640×480 @ 60 Hz, 3-bit color |
+| Input | PS/2 keyboard (a–z and space) |
+| Clock | 50 MHz `CLOCK_50`, with a PLL for the 25 MHz pixel clock |
 
-| Control | Action |
+| Control | What it does |
 |---|---|
-| `KEY0` | Reset. Clears the text boxes. |
-| `KEY1` | Shuffle and draw a new set of target words |
+| `KEY0` | Reset and clear the text boxes |
+| `KEY1` | Shuffle and draw a new set of words |
 | `KEY2` | Start the 15-second round |
-| `HEX1:HEX0` | Seconds remaining |
+| `HEX1:HEX0` | Seconds left |
 | `HEX3:HEX2` | Character errors |
 | `HEX5:HEX4` | Word errors |
 
-To play a round: `KEY0` → `KEY1` → `KEY2` → type.
+To play: `KEY0`, then `KEY1`, then `KEY2`, then type.
 
 ## How it works
 
-### Architecture
-
 <p align="center"><img src="doc/media/architecture.svg" alt="Block diagram"></p>
 
-`main.v` is the control plane: the game-phase flags (preload, typing, post-game), the preload FSM, the text cursor, the box-clear FSM, and the arbiter that picks which drawer owns the pixel bus. Every other module does one job behind a `valid`/`busy`/`done` handshake.
+`main.v` is the top level. It holds the game-state flags (preload, typing, results), the preload FSM, the text cursor, the logic that clears the text boxes, and an arbiter that decides which drawer gets to write to the screen. Each of the other modules handles one job and talks to the top level with `valid`, `busy` and `done` signals.
 
-### Design diagrams
+### Our design diagrams
 
-Hand-drawn while designing the system. The final RTL differs in two details: `done_list` holds 40 words (a 1,600-bit bus), not 49, and a glyph takes about 400 cycles to draw, not 64.
+We drew these while planning the project. The final code changed a little from them: `done_list` ended up holding 40 words instead of 49, and drawing a letter takes about 400 clock cycles rather than 64.
 
 <table>
 <tr>
 <td align="center" width="62%"><a href="doc/diagrams/top_level.png"><img src="doc/diagrams/top_level.png" alt="Hand-drawn top-level block diagram"></a><br><sub>Top level: every module and the buses between them</sub></td>
-<td align="center" width="38%"><a href="doc/diagrams/game_flow.png"><img src="doc/diagrams/game_flow.png" alt="Game flow state diagram"></a><br><sub>Game flow: RESET → IDLE → shuffle → preload → typing → results, with KEY0 returning to RESET</sub></td>
+<td align="center" width="38%"><a href="doc/diagrams/game_flow.png"><img src="doc/diagrams/game_flow.png" alt="Game flow state diagram"></a><br><sub>Game flow, from reset to the results screen</sub></td>
 </tr>
 </table>
 
-Per-subsystem diagrams:
-
-- [Keyboard input path](doc/diagrams/input_path.png)
-- [Word source (randomizer → target words)](doc/diagrams/word_source.png)
-- [Scoring (done_list → comparator → stats)](doc/diagrams/scoring_path.png)
-- [Rendering (drawers → arbiter → clear FSM → VGA)](doc/diagrams/render_path.png)
+There are also diagrams for each part: [keyboard input](doc/diagrams/input_path.png), [word source](doc/diagrams/word_source.png), [scoring](doc/diagrams/scoring_path.png) and [rendering](doc/diagrams/render_path.png).
 
 ### Keyboard input
 
-`ps2_receiver` synchronizes the PS/2 lines into the 50 MHz domain and shifts in each 11-bit frame. `scancode_to_fontIndex` drops break (`F0 xx`) and extended (`E0 xx`) sequences, and maps a–z to 0–25 and space to 26. Those are the same numbers as the glyph positions in the font ROM, so a key's code is used directly as a font address. `main.v` accepts a key only while a round is running and nothing is drawing or clearing.
+The PS/2 clock and data lines come from the keyboard, which isn't synced to our 50 MHz clock, so `ps2_receiver` runs both through two flip-flops first and then shifts in each 11-bit frame. A keyboard sends a code when you press a key and `F0` plus that code when you let go, so `scancode_to_fontIndex` throws away the release codes and the extended (`E0`) keys. Letters become 0–25 and space becomes 26. We picked those numbers on purpose, because they line up with where each letter sits in the font ROM.
 
 ### Picking words
 
-On `KEY1`, `word_randomizer` steps an 8-bit LFSR (taps 8, 6, 5, 4), seeded from a free-running counter so the time of the button press changes the shuffle. A 200-bit `used` vector rejects repeats. `target_words` keeps the first 49 picks from its 200-word dictionary. A preload FSM then streams them one character at a time, drawing each on screen and copying it into `done_list` for the scorer. It stops after at least 175 characters, at a word boundary.
+When you press KEY1, `word_randomizer` runs an 8-bit LFSR. It's seeded from a counter that never stops, so the exact moment you press the button changes the order you get. A 200-bit "used" register stops any word from being picked twice, and `target_words` keeps the first 49 picks. A small FSM then sends those words out one letter at a time. Each letter gets drawn on screen and also saved into `done_list` so the scorer knows what you're supposed to type. It stops once about 175 characters are on screen, at the end of a word.
 
 ### Scoring
 
-`comparator` walks a `(word, letter)` pointer through the target list on every keystroke:
+`comparator` keeps track of which word and letter you're on and checks every key you press:
 
-| Typed | Expected | Result |
+| You type | It expects | What happens |
 |---|---|---|
-| letter | same letter | advance |
-| letter | different letter | +1 char error, word marked wrong, advance |
-| letter | end of word | +1 char error (extra letter), word marked wrong |
-| space | end of word | next word; +1 word error if marked wrong |
-| space | still mid-word | +1 char error per skipped letter, +1 word error, next word |
+| a letter | that letter | move on |
+| a letter | a different letter | +1 char error, word marked wrong, move on |
+| a letter | the end of the word | +1 char error (extra letter), word marked wrong |
+| space | the end of the word | next word, +1 word error if the word was marked wrong |
+| space | more letters | +1 char error for each letter you skipped, +1 word error, next word |
 
-If `char_errors` rose on a keystroke, that glyph is drawn red; otherwise white. When the timer expires, `stats_calculator` computes `WPM = correct × 4 / 5` (15-second round) and `accuracy = correct × 100 / total`, then registers them as BCD digits.
+If the character error count went up on a keypress, that letter gets drawn in red. When time runs out, `stats_calculator` works out `WPM = correct × 4 / 5` (since a round is a quarter of a minute) and `accuracy = correct × 100 / total`, then converts both to decimal digits for the results screen.
 
 ### Drawing text
 
-There is no text mode. Three drawers (`preload_`, `char_` and `stats_to_pixel_draw`) share one FSM, `IDLE → SETUP → READ → DRAW → NEXT_PX → NEXT_ROW → DONE`. Each one reads an 8×8 glyph from a block-RAM font ROM and writes every lit pixel as a 2×2 block (3×3 for the result digits). Only lit pixels are written, so whatever is already in the framebuffer shows through behind each glyph.
+There's no text mode on the board, so every letter is drawn one pixel at a time. We have three drawers, for the target words, what you type and the final stats, and they all use the same FSM: `IDLE → SETUP → READ → DRAW → NEXT_PX → NEXT_ROW → DONE`. Each one reads an 8×8 letter out of a font ROM and draws every lit pixel as a 2×2 block (3×3 for the big numbers on the results screen). They only draw the lit pixels and skip the background ones.
 
-### Two framebuffers
+### Two screens
 
-Titles, labels and borders aren't drawn by logic. They're baked into the framebuffers' initial contents as `.mif` files. `vga_adapter` was modified to hold **two** 640×480 framebuffers, and one `nextScreen` bit picks which is drawn into and shown, so switching to the results screen is a single register flip. That only fits because the design drops to 3-bit color: one 9-bit framebuffer is 68% of the chip's block RAM, while two 3-bit ones are 45%.
+We didn't draw the titles, labels or boxes with logic. They're saved as images in `.mif` files that get loaded into the framebuffers when the board is programmed. We changed the course's `vga_adapter` to hold two full framebuffers, one for the game and one for the results, and a single bit picks which one is on screen. That made switching to the results page instant.
+
+Fitting two full screens meant dropping from 9-bit to 3-bit color. A single 9-bit screen would have used 68% of the chip's block RAM on its own, while two 3-bit screens use 45%.
 
 <p align="center">
   <img src="doc/media/framebuffer_game.png" width="400" alt="Game-screen framebuffer initial contents">
   &nbsp;
   <img src="doc/media/framebuffer_results.png" width="400" alt="Results-screen framebuffer initial contents">
-  <br><sub>Initial framebuffer contents, rendered from the .mif files.</sub>
+  <br><sub>What's in each framebuffer at power-on</sub>
 </p>
 
-A box-clear FSM sweeps the text boxes back to black on reset, and clears the typing box when the cursor wraps.
+There's also a clear FSM that wipes the text boxes back to black on reset, and wipes the typing box when you fill it up.
 
 ## Repository layout
 
 ```
-src/                     final RTL (what the .sof was built from)
-  main.v                 top level: control FSMs, arbiter, clear FSM, HEX
+src/                     final Verilog (what the bitstream was built from)
+  main.v                 top level, game FSMs, arbiter, box clearing, HEX displays
   Input/                 ps2_receiver, scancode_to_fontIndex
   Game/                  comparator, done_list, stats_calculator, timer, word_randomizer
-  Memory/                target_words (dictionary), font_mem, num_mem (ROM wrappers)
-  Drawing/               preload / char / stats glyph drawers
-  VGA_Adapter/           course VGA adapter, modified for two framebuffers
-project/                 Quartus project, .mif images, prebuilt bitstream, reports
-test/                    self-checking Icarus Verilog testbenches + Makefile
-doc/KNOWN_ISSUES.md      bug list with root causes and fixes
-doc/media/               demo video, photos, block diagram, rendered framebuffers
-doc/diagrams/            hand-drawn design diagrams (top level, game flow, subsystems)
-archive/                 milestone 1–3 development snapshots (source only)
+  Memory/                target_words (the word list), font_mem, num_mem
+  Drawing/               the three letter/number drawers
+  VGA_Adapter/           course VGA adapter, changed to hold two framebuffers
+project/                 Quartus project, .mif images, prebuilt .sof, reports
+test/                    Icarus Verilog testbenches and a Makefile
+doc/KNOWN_ISSUES.md      every bug we know about and how to fix it
+doc/media/               demo video, photos, block diagram, framebuffer images
+doc/diagrams/            our hand-drawn design diagrams
+archive/                 code from milestones 1–3
 ```
 
 ## Build and run
 
-**Flash the prebuilt bitstream:** open the Quartus Programmer, select `project/harambetype.sof`, and program the DE1-SoC over USB-Blaster.
+To just play it, open the Quartus Programmer, pick `project/harambetype.sof` and program the board over USB-Blaster.
 
-**Rebuild:** open `project/main.qpf` in Quartus Prime 18.1 Lite or newer and compile.
+To rebuild it, open `project/main.qpf` in Quartus Prime 18.1 Lite (or newer) and compile.
 
 ## Simulation
 
-Self-checking testbenches run on free tools with `cd test && make`:
+There are four testbenches in `test/` that check their own results. You only need Icarus Verilog to run them:
 
-| Test | Checks | Status |
+```
+cd test && make
+```
+
+| Test | What it checks | Result |
 |---|---|---|
-| `tb_input` | Real PS/2 frames through the receiver and decoder; break, extended and unmapped keys are filtered | PASS |
+| `tb_input` | Sends real PS/2 frames through the receiver and decoder, and checks that key releases, extended keys and unmapped keys get ignored | PASS |
 | `tb_comparator` | Scoring for perfect typing, typos, short words and extra letters | PASS, 2 XFAIL |
-| `tb_target_words` | Each streamed word is the one the randomizer picked | XFAIL |
-| `tb_timer` | A round lasts 15 s | XFAIL |
+| `tb_target_words` | Every word that comes out is the one the randomizer picked | XFAIL |
+| `tb_timer` | A round lasts 15 seconds | XFAIL |
 
-XFAIL means the test checks the correct behaviour and fails because of a [known bug](#known-issues).
+XFAIL means the test is checking for the right behaviour and fails because of one of the bugs below.
 
 ## Known issues
 
-It works in a demo, but it has real bugs, found by reading the code and the Quartus reports. Full root causes and fixes are in **[doc/KNOWN_ISSUES.md](doc/KNOWN_ISSUES.md)**.
+It works in a demo, but we've found real bugs since. Here's the short version. [doc/KNOWN_ISSUES.md](doc/KNOWN_ISSUES.md) explains each one and how to fix it.
 
-| # | Issue | Cause | Test |
+| # | Problem | Cause | Test |
 |---|---|---|---|
-| 1 | Dictionary words 128–199 never appear | 10-bit address for an 11-bit range | `tb_target_words` |
-| 2 | A correct 8-letter word scores as wrong | no slot left for the word terminator | `tb_comparator` |
-| 3 | Rounds last 16 s, but WPM assumes 15 | timer expires one tick after 0 | `tb_timer` |
-| 4 | Stale first-word length in later rounds | non-blocking assignment ordering | `tb_comparator` |
-| 5 | Round 2 results draw over round 1 | results screen is never cleared | — |
-| 6 | Fmax 17.6 MHz vs 50 MHz clock | 25 combinational dividers, no SDC | — |
-| 7 | `comparator` uses 60% of the logic | runtime-indexed 1,600-bit bus | — |
+| 1 | Words 128–199 in the list never show up | address is 10 bits but needs 11 | `tb_target_words` |
+| 2 | Typing an 8-letter word correctly still counts as wrong | no room left to mark the end of the word | `tb_comparator` |
+| 3 | Rounds actually last 16 s, but WPM assumes 15 | timer ends one tick late | `tb_timer` |
+| 4 | Wrong word length used at the start of later rounds | ordering of non-blocking assignments | `tb_comparator` |
+| 5 | Round 2's results get drawn on top of round 1's | results screen is never cleared | — |
+| 6 | Max frequency is 17.6 MHz, the clock is 50 MHz | 25 single-cycle dividers, no timing constraints | — |
+| 7 | `comparator` uses 60% of all the logic | runtime index into a 1,600-bit bus | — |
 
-## Design evolution
+## How it evolved
 
-- **Milestone 1:** PS/2 keyboard → letter on screen. A single glyph drawer and the stock course VGA adapter.
-- **Milestone 2:** target words, the `done_list`/`comparator` scoring core, and an on-screen countdown. 9-bit color with one framebuffer used 86% of the RAM blocks.
-- **Milestone 3 (final):** a second framebuffer for the results screen, which forced the drop to 3-bit color. Also added: randomized word order, per-character red/white feedback, WPM and accuracy, and HEX displays for live stats.
+- **Milestone 1:** got a key press to show up as a letter on screen, using one drawer and the stock course VGA adapter.
+- **Milestone 2:** added the target words, the scoring logic and an on-screen countdown. At 9-bit color, the one screen used 86% of the RAM blocks.
+- **Milestone 3 (final):** added a second screen for results, which is why we went down to 3-bit color. Also added random word order, red/white feedback per letter, WPM and accuracy, and the HEX displays.
 
-The full history is in [`archive/`](archive).
+The code from each milestone is in [`archive/`](archive).
 
 ## Credits and license
 
-Built by [@Synx162](https://github.com/Synx162) and [Philip Mugambi](https://www.linkedin.com/in/philip-mugambi-m/) as a two-person course project.
+Built by [@Synx162](https://github.com/Synx162) and [Philip Mugambi](https://www.linkedin.com/in/philip-mugambi-m/).
 
-- `vga_adapter`, `vga_controller`, `vga_address_translator` and `vga_pll` are based on the University of Toronto ECE VGA adapter. `vga_adapter` was modified here to hold two framebuffers.
-- The PS/2 receiver's synchronizer and shift register follow the course PS/2 demo.
+The VGA adapter files (`vga_adapter`, `vga_controller`, `vga_address_translator`, `vga_pll`) are based on the University of Toronto ECE VGA adapter, which we modified to hold two framebuffers. The PS/2 receiver's synchronizer and shift register follow the course PS/2 demo.
 
 MIT licensed. See [LICENSE](LICENSE).
