@@ -1,0 +1,23 @@
+# Quartus build output (regenerate with a full compile)
+db/
+incremental_db/
+output_files/
+simulation/
+*.qws
+*.bak
+*.rpt.bak
+c5_pin_model_dump.txt
+PLLJ_PLLSPE_INFO.txt
+greybox_tmp/
+
+# ModelSim / Icarus
+work/
+transcript
+*.wlf
+*.vcd
+*.vvp
+test/build/
+
+# OS
+.DS_Store
+Thumbs.db
