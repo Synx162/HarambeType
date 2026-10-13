@@ -213,6 +213,6 @@ Things we would change ([details and fixes](doc/KNOWN_ISSUES.md)):
 
 Built by [@Synx162](https://github.com/Synx162) and [Philip Mugambi](https://www.linkedin.com/in/philip-mugambi-m/).
 
-The VGA adapter, address translator and PLL are University of Toronto / Terasic DE1-SoC reference components, with `vga_adapter` modified to hold two framebuffers. The PS/2 receiver's synchronizer follows the course PS/2 demo.
+The VGA adapter, address translator and PLL are University of Toronto / Terasic DE1-SoC reference components, with `vga_adapter` modified to hold two framebuffers. 
 
 MIT licensed. See [LICENSE](LICENSE).
