@@ -13,7 +13,7 @@ There is no CPU or soft core in the design. Keyboard decoding, word shuffling, s
 
 https://github.com/user-attachments/assets/7e3226c9-695f-4c09-96e7-4745e9431d1e
 
-<p align="center"><em>Running on the board. Shuffling words, typing a round, and wrong letters turning red.</em></p>
+<p align="center"><em>Running on the board: typing a round, with wrong letters drawn in red.</em></p>
 
 ---
 
